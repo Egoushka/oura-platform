@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OuraPlatform.Api/OuraPlatform.Api.csproj" />
+    <Project Path="src/OuraPlatform.Ingest/OuraPlatform.Ingest.csproj" />
+    <Project Path="src/OuraPlatform.Mcp/OuraPlatform.Mcp.csproj" />
+    <Project Path="src/OuraPlatform.Oura/OuraPlatform.Oura.csproj" />
+    <Project Path="src/OuraPlatform.Storage/OuraPlatform.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OuraPlatform.Oura.Tests/OuraPlatform.Oura.Tests.csproj" />
+    <Project Path="tests/OuraPlatform.Storage.Tests/OuraPlatform.Storage.Tests.csproj" />
+  </Folder>
+</Solution>

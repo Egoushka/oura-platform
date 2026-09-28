@@ -1,0 +1,390 @@
+{
+  "uid": "oura-sleep-recovery",
+  "title": "Sleep & recovery — when, not how much",
+  "description": "The Oura app already shows nightly averages. This shows where inside the night they came from.",
+  "tags": [
+    "oura"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "30m",
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HRV across the night, one line per night",
+      "description": "Aligned on each night's own bedtime rather than the clock, so a night that started before midnight is comparable with one that started at 3 a.m. Gaps are gaps — the ring produced no reading, and nothing is interpolated across them.",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    timestamptz '1970-01-01 00:00:00+00'\n        + make_interval(secs => extract(epoch from (ts - first_value(ts) over (partition by night order by ts)))) as \"time\",\n    to_char(night, 'Mon DD') as metric,\n    value\nfrom sleep_series\nwhere metric = 'hrv'\n  and $__timeFilter(ts)\n-- Must be time-ascending: Grafana rejects an unsorted frame when pivoting the\n-- `metric` column into one series per night.\norder by 1, night"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "heatmap",
+      "title": "HRV heatmap — night × time into night",
+      "description": "Each column is one night, each row a 30-minute band from bedtime. Reads as a map of when recovery collapses rather than whether the average was good.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    night::timestamptz as \"time\",\n    round(avg(value) filter (where band = 0)::numeric, 1) as \"0.5\",\n    round(avg(value) filter (where band = 1)::numeric, 1) as \"1.0\",\n    round(avg(value) filter (where band = 2)::numeric, 1) as \"1.5\",\n    round(avg(value) filter (where band = 3)::numeric, 1) as \"2.0\",\n    round(avg(value) filter (where band = 4)::numeric, 1) as \"2.5\",\n    round(avg(value) filter (where band = 5)::numeric, 1) as \"3.0\",\n    round(avg(value) filter (where band = 6)::numeric, 1) as \"3.5\",\n    round(avg(value) filter (where band = 7)::numeric, 1) as \"4.0\",\n    round(avg(value) filter (where band = 8)::numeric, 1) as \"4.5\",\n    round(avg(value) filter (where band = 9)::numeric, 1) as \"5.0\",\n    round(avg(value) filter (where band = 10)::numeric, 1) as \"5.5\",\n    round(avg(value) filter (where band = 11)::numeric, 1) as \"6.0\",\n    round(avg(value) filter (where band = 12)::numeric, 1) as \"6.5\",\n    round(avg(value) filter (where band = 13)::numeric, 1) as \"7.0\",\n    round(avg(value) filter (where band = 14)::numeric, 1) as \"7.5\",\n    round(avg(value) filter (where band = 15)::numeric, 1) as \"8.0\",\n    round(avg(value) filter (where band = 16)::numeric, 1) as \"8.5\",\n    round(avg(value) filter (where band = 17)::numeric, 1) as \"9.0\",\n    round(avg(value) filter (where band = 18)::numeric, 1) as \"9.5\",\n    round(avg(value) filter (where band = 19)::numeric, 1) as \"10.0\"\nfrom (\n    select\n        night,\n        value,\n        -- Half-hour bands measured from each night's own bedtime, so a night that\n        -- began at 00:07 lines up with one that began at 03:00.\n        floor(\n            extract(epoch from (ts - first_value(ts) over (partition by night order by ts))) / 1800\n        )::int as band\n    from sleep_series\n    where metric = 'hrv'\n      and value is not null\n      and $__timeFilter(ts)\n) banded\ngroup by night\norder by night"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Turbo",
+          "steps": 64,
+          "reverse": false,
+          "exponent": 0.5,
+          "fill": "dark-orange"
+        },
+        "cellGap": 1,
+        "yAxis": {
+          "unit": "h",
+          "axisLabel": "hours after bedtime",
+          "reverse": false
+        },
+        "legend": {
+          "show": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "yHistogram": false
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-09
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "state-timeline",
+      "title": "Hypnogram",
+      "description": "One cell per 5 minutes. Read against the heart rate below it: a REM block with a rising heart rate is a different night from a REM block without one.",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    ts as \"time\",\n    case phase\n        when 1 then 'Deep'\n        when 2 then 'Light'\n        when 3 then 'REM'\n        when 4 then 'Awake'\n    end as \"Sleep phase\"\nfrom hypnogram\nwhere $__timeFilter(ts)\norder by ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 90,
+            "lineWidth": 0
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sleep phase"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Deep": {
+                        "color": "dark-blue",
+                        "index": 0
+                      },
+                      "Light": {
+                        "color": "semi-dark-blue",
+                        "index": 1
+                      },
+                      "REM": {
+                        "color": "purple",
+                        "index": 2
+                      },
+                      "Awake": {
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Heart rate and HRV during sleep",
+      "description": "The 5-minute arrays as they actually arrive, on the clock. lowest_heart_rate in `daily` is computed by Oura on 30-second samples and will not equal the minimum of this line — that discrepancy is expected.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    ts as \"time\",\n    case metric when 'hr' then 'Heart rate' else 'HRV' end as metric,\n    value\nfrom sleep_series\nwhere $__timeFilter(ts)\norder by ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Heart rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bpm"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HRV"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Per-night coverage",
+      "description": "How much of each night the ring actually measured. A night with many gaps makes its averages less trustworthy, and nothing else on this page tells you that.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    night as \"Night\",\n    round(extract(epoch from (last_ts - first_ts)) / 3600.0, 1) as \"Hours\",\n    samples as \"Cells\",\n    gaps as \"Gaps\",\n    round(100.0 * gaps / nullif(samples + gaps, 0), 1) as \"Gap %\",\n    round(avg_value::numeric, 1) as \"Mean HRV\",\n    round(median_value::numeric, 1) as \"Median HRV\",\n    round(min_value::numeric, 1) as \"Min HRV\",\n    round(max_value::numeric, 1) as \"Max HRV\"\nfrom sleep_nightly\nwhere metric = 'hrv'\n  and $__timeFilter(first_ts)\norder by night desc"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Gap %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 25
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Night",
+            "desc": true
+          }
+        ]
+      }
+    }
+  ]
+}

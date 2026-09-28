@@ -1,0 +1,376 @@
+{
+  "uid": "oura-distributions",
+  "title": "Distributions — spread, not averages",
+  "description": "An average hides the nights worth explaining. Everything here is a distribution. The context panels join the `context` table, which is empty until Stage 4 fills it — the queries are already correct and light up on their own.",
+  "tags": [
+    "oura"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "1h",
+  "time": {
+    "from": "now-365d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Readiness by weekday — five-number summary",
+      "description": "Grafana core has no box-plot panel, so this is the same five numbers as a table: min, lower quartile, median, upper quartile, max. Read `n` first — a weekday with two samples has no distribution worth reading.",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    to_char(day, 'Dy')                                                    as \"Weekday\",\n    count(*)                                                              as \"n\",\n    min(readiness_score)                                                  as \"Min\",\n    round(percentile_cont(0.25) within group (order by readiness_score)::numeric, 1) as \"Q1\",\n    round(percentile_cont(0.50) within group (order by readiness_score)::numeric, 1) as \"Median\",\n    round(percentile_cont(0.75) within group (order by readiness_score)::numeric, 1) as \"Q3\",\n    max(readiness_score)                                                  as \"Max\",\n    round(stddev_samp(readiness_score), 1)                                as \"SD\"\nfrom daily\nwhere readiness_score is not null\n  and $__timeFilter(day)\ngroup by to_char(day, 'Dy'), extract(isodow from day)\norder by extract(isodow from day)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Median"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "green",
+                      "value": 85
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "n"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 5
+                    },
+                    {
+                      "color": "text",
+                      "value": 12
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Readiness by weekday — quartiles",
+      "description": "The same numbers drawn. The gap between Q1 and Q3 is the point: a weekday with a high median and a wide spread is not a good weekday, it is an inconsistent one.",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    to_char(day, 'Dy') as \"Weekday\",\n    round(percentile_cont(0.25) within group (order by readiness_score)::numeric, 1) as \"Q1\",\n    round(percentile_cont(0.50) within group (order by readiness_score)::numeric, 1) as \"Median\",\n    round(percentile_cont(0.75) within group (order by readiness_score)::numeric, 1) as \"Q3\"\nfrom daily\nwhere readiness_score is not null\n  and $__timeFilter(day)\ngroup by to_char(day, 'Dy'), extract(isodow from day)\norder by extract(isodow from day)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "axisSoftMin": 0,
+            "axisSoftMax": 100
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Readiness after an evening that ran past 19:00",
+      "description": "The reason this project exists: Oura cannot see your calendar. Asks when the day *finished*, not when a meeting started — an 18:00–20:30 call does not start after 19:00 but certainly ends after it. Populated by the calendar importer.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "-- context_daily resolves the local end hour; \"after 19:00\" is a wall-clock question\n-- and the rows are stored in UTC.\nwith labelled as (\n    select\n        d.readiness_score,\n        d.hrv_avg,\n        d.rhr_lowest,\n        case when c.last_end_hour >= 19 then 'Ran past 19:00' else 'Evening free' end as bucket\n    from daily d\n    left join context_daily c\n           on c.day = d.day\n          and c.kind = 'meeting'\n    where d.readiness_score is not null\n      and $__timeFilter(d.day)\n)\nselect\n    bucket as \"Evening\",\n    count(*) as \"n\",\n    round(percentile_cont(0.25) within group (order by readiness_score)::numeric, 1) as \"Readiness Q1\",\n    round(percentile_cont(0.50) within group (order by readiness_score)::numeric, 1) as \"Readiness median\",\n    round(percentile_cont(0.75) within group (order by readiness_score)::numeric, 1) as \"Readiness Q3\",\n    round(avg(hrv_avg), 1) as \"Mean HRV\",\n    round(avg(rhr_lowest), 1) as \"Mean resting HR\"\nfrom labelled\ngroup by bucket\norder by bucket"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Readiness by context kind",
+      "description": "Generic over whatever lands in `context` — meetings from the calendar, and alcohol, caffeine or naps from Oura's own tags. Compares days a thing happened against days it did not, so a kind only appears once it has data.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "with days as (\n    select day, readiness_score, sleep_score, hrv_avg\n    from daily\n    where readiness_score is not null and $__timeFilter(day)\n),\ntagged as (\n    select distinct kind, day from context_daily\n)\nselect\n    t.kind as \"Context\",\n    count(*) as \"Days with\",\n    round(avg(d.readiness_score), 1) as \"Readiness (with)\",\n    (select round(avg(readiness_score), 1) from days x\n      where not exists (select 1 from tagged y where y.kind = t.kind and y.day = x.day)) as \"Readiness (without)\",\n    round(avg(d.hrv_avg), 1) as \"HRV (with)\",\n    (select round(avg(hrv_avg), 1) from days x\n      where not exists (select 1 from tagged y where y.kind = t.kind and y.day = x.day)) as \"HRV (without)\"\nfrom tagged t\njoin days d on d.day = t.day\ngroup by t.kind\norder by t.kind"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "histogram",
+      "title": "Where the nights actually fall",
+      "description": "The shape behind the scores. A long left tail matters more than the mean moving a point.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    readiness_score as \"Readiness\",\n    sleep_score     as \"Sleep\",\n    activity_score  as \"Activity\"\nfrom daily\nwhere $__timeFilter(day)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 60
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "bucketSize": 5,
+        "combine": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Calendar load per day",
+      "description": "Hours of meetings and the hour the day finished. If this is flat and empty, the calendar importer has no feeds configured — which is not the same as a quiet week.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "oura-timescaledb"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "select\n    day::timestamptz as \"time\",\n    'Meeting hours' as metric,\n    hours as value\nfrom context_daily\nwhere kind = 'meeting' and $__timeFilter(day)\nunion all\nselect day::timestamptz, 'Last end hour (local)', last_end_hour\nfrom context_daily\nwhere kind = 'meeting' and $__timeFilter(day)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last end hour (local)"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "h"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Meeting hours"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "h"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ]
+}

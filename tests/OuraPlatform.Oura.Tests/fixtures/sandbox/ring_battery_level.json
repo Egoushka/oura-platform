@@ -1,0 +1,1 @@
+{"data":[{"timestamp":"2025-06-01T00:00:00.000Z","charging":false,"in_charger":false,"level":85,"producer_timestamp":null},{"timestamp":"2025-06-02T00:00:00.000Z","charging":true,"in_charger":true,"level":95,"producer_timestamp":null}],"next_token":null}

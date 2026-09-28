@@ -1,0 +1,22 @@
+# Provisioned from file, never configured in the UI.
+apiVersion: 1
+
+datasources:
+  - name: TimescaleDB
+    uid: oura-timescaledb
+    type: postgres
+    access: proxy
+    url: timescaledb:5432
+    database: ${POSTGRES_DB}
+    user: ${POSTGRES_USER}
+    isDefault: true
+    editable: false
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: true
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}

@@ -1,0 +1,132 @@
+{
+  "uid": "oura-early-warning",
+  "title": "Early warning — resting HR and temperature",
+  "description": "Resting heart rate and body temperature drift before symptoms do. What matters is the deviation from your own recent baseline, not the absolute number, so every panel here is a comparison against a rolling window.",
+  "tags": ["oura"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "30m",
+  "time": { "from": "now-180d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Today vs baseline",
+      "description": "Latest night against its own 30-day mean. Two or three consecutive days of elevated resting HR and temperature is the classic pre-symptomatic pattern.",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "oura-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "-- Rolling means are computed over the full history first; filtering earlier would\n-- shrink the window at the left edge and quietly change the baseline.\nwith rolled as (\n    select\n        day,\n        rhr_lowest,\n        temp_deviation,\n        hrv_avg,\n        avg(rhr_lowest)  over w30 as rhr_30,\n        avg(hrv_avg)     over w30 as hrv_30\n    from daily\n    window w30 as (order by day rows between 29 preceding and 1 preceding)\n)\nselect\n    round(rhr_lowest - rhr_30, 1) as \"Resting HR vs 30d\",\n    round(temp_deviation, 2)      as \"Temp deviation\",\n    round(hrv_avg - hrv_30, 1)    as \"HRV vs 30d\"\nfrom rolled\nwhere rhr_lowest is not null\norder by day desc\nlimit 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 2 }, { "color": "red", "value": 4 } ] }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Resting HR vs 30d" }, "properties": [ { "id": "unit", "value": "bpm" } ] },
+          { "matcher": { "id": "byName", "options": "Temp deviation" },
+            "properties": [ { "id": "unit", "value": "celsius" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.3 }, { "color": "red", "value": 0.7 } ] } } ] },
+          { "matcher": { "id": "byName", "options": "HRV vs 30d" },
+            "properties": [ { "id": "unit", "value": "ms" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": -8 }, { "color": "green", "value": -2 } ] } } ] }
+        ]
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "horizontal"
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Resting heart rate — 30 / 90 / 365-day rolling",
+      "description": "The nightly value is noisy; the crossings matter. A nightly line pulling away from its 30-day mean while the 90-day sits flat is the signal.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "oura-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "with rolled as (\n    select\n        day::timestamptz as t,\n        rhr_lowest,\n        avg(rhr_lowest) over (order by day rows between  29 preceding and current row) as r30,\n        avg(rhr_lowest) over (order by day rows between  89 preceding and current row) as r90,\n        avg(rhr_lowest) over (order by day rows between 364 preceding and current row) as r365\n    from daily\n    where rhr_lowest is not null\n)\nselect t as \"time\", 'Nightly'  as metric, rhr_lowest as value from rolled where $__timeFilter(t)\nunion all\nselect t, '30-day',  r30  from rolled where $__timeFilter(t)\nunion all\nselect t, '90-day',  r90  from rolled where $__timeFilter(t)\nunion all\nselect t, '365-day', r365 from rolled where $__timeFilter(t)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bpm", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "auto", "spanNulls": false } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Nightly" },
+            "properties": [ { "id": "custom.lineWidth", "value": 1 }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } }, { "id": "custom.fillOpacity", "value": 5 } ] },
+          { "matcher": { "id": "byName", "options": "30-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "90-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] },
+          { "matcher": { "id": "byName", "options": "365-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Temperature deviation — 30 / 90 / 365-day rolling",
+      "description": "Oura already reports this as a deviation from your own baseline, so zero is normal and the sign carries the meaning. Sustained positive drift is the illness signal; a single spike usually is not.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "oura-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "with rolled as (\n    select\n        day::timestamptz as t,\n        temp_deviation,\n        avg(temp_deviation) over (order by day rows between  29 preceding and current row) as d30,\n        avg(temp_deviation) over (order by day rows between  89 preceding and current row) as d90,\n        avg(temp_deviation) over (order by day rows between 364 preceding and current row) as d365\n    from daily\n    where temp_deviation is not null\n)\nselect t as \"time\", 'Nightly'  as metric, temp_deviation as value from rolled where $__timeFilter(t)\nunion all\nselect t, '30-day',  d30  from rolled where $__timeFilter(t)\nunion all\nselect t, '90-day',  d90  from rolled where $__timeFilter(t)\nunion all\nselect t, '365-day', d365 from rolled where $__timeFilter(t)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "celsius", "decimals": 2, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "auto", "spanNulls": false, "axisSoftMin": -1, "axisSoftMax": 1 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Nightly" },
+            "properties": [ { "id": "custom.lineWidth", "value": 1 }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } }, { "id": "custom.fillOpacity", "value": 5 } ] },
+          { "matcher": { "id": "byName", "options": "30-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "90-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] },
+          { "matcher": { "id": "byName", "options": "365-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Nightly HRV against its own baseline",
+      "description": "HRV is too noisy night to night to read directly. The 7-day mean against the 30-day is the part worth reacting to.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 25 },
+      "datasource": { "type": "postgres", "uid": "oura-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "with rolled as (\n    select\n        day::timestamptz as t,\n        hrv_avg,\n        avg(hrv_avg) over (order by day rows between  6 preceding and current row) as h7,\n        avg(hrv_avg) over (order by day rows between 29 preceding and current row) as h30\n    from daily\n    where hrv_avg is not null\n)\nselect t as \"time\", 'Nightly' as metric, hrv_avg as value from rolled where $__timeFilter(t)\nunion all\nselect t, '7-day',  h7  from rolled where $__timeFilter(t)\nunion all\nselect t, '30-day', h30 from rolled where $__timeFilter(t)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "auto", "spanNulls": false } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Nightly" },
+            "properties": [ { "id": "custom.lineWidth", "value": 1 }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } }, { "id": "custom.fillOpacity", "value": 5 } ] },
+          { "matcher": { "id": "byName", "options": "7-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "30-day" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } }
+    }
+  ]
+}

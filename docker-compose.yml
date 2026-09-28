@@ -1,0 +1,95 @@
+name: oura-platform
+
+x-dotnet-env: &dotnet-env
+  ConnectionStrings__Postgres: "Host=timescaledb;Port=5432;Database=${POSTGRES_DB:-oura};Username=${POSTGRES_USER:-oura};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+  Oura__ClientId: "${Oura__ClientId:?register an app at https://developer.ouraring.com}"
+  Oura__ClientSecret: "${Oura__ClientSecret:?register an app at https://developer.ouraring.com}"
+  Oura__RedirectUri: "${Oura__RedirectUri:-http://localhost:8080/oauth/callback}"
+  Oura__Scopes: "${Oura__Scopes:-personal daily heartrate workout tag session spo2Daily}"
+  Oura__UseSandbox: "${Oura__UseSandbox:-false}"
+  Oura__BackfillFrom: "${Oura__BackfillFrom:-2020-01-01}"
+  Oura__ReconcileTrailingDays: "${Oura__ReconcileTrailingDays:-7}"
+  TZ: "${TZ:-UTC}"
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.17.2-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-oura}"
+      POSTGRES_USER: "${POSTGRES_USER:-oura}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+      TZ: "${TZ:-UTC}"
+    ports:
+      # Bound to loopback: the only reason to expose this is ad-hoc psql from the host.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oura} -d ${POSTGRES_DB:-oura}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Runs the migrations, backfills once, then reconciles a trailing window on a timer.
+  # Single instance by design -- see the invariant in CLAUDE.md. Do not scale this.
+  ingest:
+    build:
+      context: .
+      args:
+        PROJECT: OuraPlatform.Ingest
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment: *dotnet-env
+
+  # OAuth callback and health only. No auth of its own: it sits behind the reverse proxy.
+  api:
+    build:
+      context: .
+      args:
+        PROJECT: OuraPlatform.Api
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment: *dotnet-env
+    ports:
+      # Loopback: nothing here authenticates its callers, and /oauth/start links whichever Oura
+      # account completes it.
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    healthcheck:
+      # /healthz reports Degraded until the browser handshake is done, which is still a 200.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Stage 4. Read-only analytics over the warehouse, spoken as MCP. It holds no Oura credential
+  # of its own and never calls the API — the value is in the joins, not in proxying the phone app.
+  mcp:
+    build:
+      context: .
+      args:
+        PROJECT: OuraPlatform.Mcp
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment: *dotnet-env
+    ports:
+      # Loopback: no auth, and it serves health data. Put an authenticating proxy in front to share it.
+      - "127.0.0.1:${MCP_PORT:-8081}:8080"
+    healthcheck:
+      # Degraded, still a 200, until ingest has backfilled anything to analyse.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  timescale-data:

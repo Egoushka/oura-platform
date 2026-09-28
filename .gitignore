@@ -1,0 +1,30 @@
+.env
+*.env
+!.env.example
+
+# Warehouse dumps are personal health data. They are a transport artifact for moving
+# hosts, never something to commit.
+oura-warehouse-*.sql.gz
+
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.userprefs
+.vs/
+.idea/
+.vscode/
+*.DotSettings.user
+
+.DS_Store
+
+# graft keeps its index and telemetry cache here; it is regenerated per machine.
+graft/
+
+# Private, never committed: the denylist the hooks read, and personal agent notes.
+.private-terms
+CLAUDE.local.md
