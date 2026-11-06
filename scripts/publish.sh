@@ -55,9 +55,9 @@ for pair in $PROJECTS; do
 done
 
 echo
-# All three images are stateless, so the homelab pins them by semver tag, not by digest. The digests
-# are printed as provenance for the release notes.
-echo "Published (digest for the record):"
+# The homelab pins every first-party image as tag@digest (homelab-gitops#430), and Renovate opens the
+# bump PR once a new tag is on GHCR. The lines below are the exact refs to check that PR against.
+echo "Published (tag@digest, as the homelab pins them):"
 for pair in $PROJECTS; do
   image="${pair%%:*}"
   ref="${REGISTRY}/${image}:${VERSION}"
