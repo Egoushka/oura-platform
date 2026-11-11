@@ -31,20 +31,7 @@ Context__Calendars__0__ExcludeContaining__1=out of office
 
 A second feed is `Context__Calendars__1__*`. Nothing validates this section at startup, so a feed with an empty `Url` shows up only as an import error in the log.
 
-> [!WARNING]
-> `docker-compose.yml` passes no `Context__*` variable to any container. Compose reads `.env` to fill in the compose file, and the `ingest` service's environment is only the `x-dotnet-env` block. Setting the variables in `.env` alone does nothing.
-
-Add them to the `ingest` service yourself. Compose merges a `docker-compose.override.yml` next to `docker-compose.yml` into it, and the URL can stay in `.env`:
-
-```yaml title="docker-compose.override.yml"
-services:
-  ingest:
-    environment:
-      Context__Calendars__0__Name: "work"
-      Context__Calendars__0__Url: "${Context__Calendars__0__Url}"
-      Context__Calendars__0__Kind: "meeting"
-      Context__Calendars__0__ExcludeContaining__0: "birthday"
-```
+`docker-compose.yml` loads `.env` into the `ingest` container (`env_file`), so these variables reach the importer. Uncomment the `Context__Calendars__0__*` block in your `.env`; it is commented out by default because a feed with an empty `Url` is logged as an error on every run.
 
 Then run `docker compose up -d`. The recreated ingest runs a cycle as soon as it starts and logs `Calendar 'work': {Written} event(s) upserted, {Pruned} no longer in the feed removed.`
 
@@ -56,20 +43,22 @@ What the importer does with a feed:
 - Rows of that source inside the window that the feed no longer lists are deleted: a cancelled meeting simply stops appearing in a feed ([ContextRepository.cs](../../src/OuraPlatform.Storage/ContextRepository.cs)).
 - A feed that answers with something other than iCalendar, such as the HTML page a revoked Google address returns, fails with `did not return parseable iCalendar data`. A failing feed logs `Calendar '<Name>' failed to import; continuing.` and stops neither the other feeds nor the Oura ingest ([IngestWorker.cs](../../src/OuraPlatform.Ingest/IngestWorker.cs)).
 
-The import runs once per ingest cycle, after the reconcile, so every `Ingest:ReconcileInterval` (6 hours). `Context:Interval` in `.env.example` is read by nothing. The cycle starts only once an Oura token exists, so feeds are not read before you authorize.
+The import runs once per ingest cycle, after the reconcile, so every `Ingest:ReconcileInterval` (6 hours). There is no separate interval setting. The cycle starts only once an Oura token exists, so feeds are not read before you authorize.
 
 > [!NOTE]
-> `context_daily` computes each day and its `last_end_hour` in `Europe/Kyiv`, written into the view in [0004_context_identity.sql](../../db/migrations/0004_context_identity.sql). `Context:TimeZone` is declared but read by nothing. In another time zone, that view's days and hours are still Kyiv's, and changing it takes a new migration: applied migrations are never edited ([CLAUDE.md](../../CLAUDE.md#conventions)).
+> `context_daily` computes each day and its `last_end_hour` in `Europe/Kyiv`, written into the view in [0004_context_identity.sql](../../db/migrations/0004_context_identity.sql). `Context:TimeZone` is declared in the code but read by nothing. In another time zone, that view's days and hours are still Kyiv's, and changing it takes a new migration: applied migrations are never edited ([CLAUDE.md](../../CLAUDE.md#conventions)).
 
 Oura's own tags need no configuration. Every cycle, the tag importer copies each stored `enhanced_tag` into `context` with the source `oura_tag`. It strips the prefixes `tag_generic_`, `generic_` and `tag_` from the tag code, so `generic_alcohol` becomes the kind `alcohol` ([OuraTagContextImporter.cs](../../src/OuraPlatform.Ingest/OuraTagContextImporter.cs)).
 
 ## Install the Grafana dashboards
 
-The stack runs no Grafana. The dashboards are meant for one you already run ([README](../../README.md#6-grafana)).
+Run the bundled Grafana with `docker compose --profile grafana up -d`. It provisions the datasource ([timescaledb.yml](../../grafana/provisioning/datasources/timescaledb.yml)), a dashboard provider ([dashboards.yml](../../grafana/provisioning/dashboards/dashboards.yml)) and the three dashboards in [grafana/dashboards/](../../grafana/dashboards/). Log in at `http://localhost:${GRAFANA_PORT}` (default 3000) as `GRAFANA_ADMIN_USER` with `GRAFANA_ADMIN_PASSWORD`.
+
+To use a Grafana you already run instead:
 
 1. Provision the datasource from [timescaledb.yml](../../grafana/provisioning/datasources/timescaledb.yml). It defines a Postgres datasource with the uid `oura-timescaledb` at `timescaledb:5432`, and fills `${POSTGRES_DB}`, `${POSTGRES_USER}` and `${POSTGRES_PASSWORD}` from Grafana's environment. Grafana therefore needs a route to the `timescaledb` service and those three variables.
-2. Copy the three JSON files in [grafana/dashboards/](../../grafana/dashboards/) into the directory your Grafana provisions dashboards from. The repository ships no dashboard provider file, so that provider comes from your Grafana's own configuration. Every panel queries the datasource by the uid `oura-timescaledb`.
-3. From the repository root, run every panel's query through Grafana:
+2. Copy the three JSON files into the directory your Grafana provisions dashboards from, with a provider like [dashboards.yml](../../grafana/provisioning/dashboards/dashboards.yml). Every panel queries the datasource by the uid `oura-timescaledb`.
+Then, from the repository root, run every panel's query through Grafana:
 
 ```bash
 GRAFANA_ADMIN_PASSWORD=... ./grafana/verify-dashboards.py

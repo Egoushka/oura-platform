@@ -62,7 +62,7 @@ The tests call neither Oura's production API nor the network. The Oura suite rep
 
 **Retry pipeline and rate limits.** The retry count, backoff and `Retry-After` handling have no test. `Rate_limit_details_survive_into_the_exception` exercises the client without the pipeline.
 
-**Calendar import.** `CalendarImporter` has no test. `IcsParsingTests` pins the Ical.Net behaviour it relies on (recurrences sharing one UID, `DURATION` without `DTEND`, all-day detection, occurrences that are ordered and bounded only by the caller), and `ContextTests` covers the repository. Compose does not pass the `Context__*` settings, `Context:Interval` and `Context:TimeZone` are read by nothing, and `context_daily` fixes the time zone to `Europe/Kyiv` ([Add a calendar feed](operations.md#add-a-calendar-feed)).
+**Calendar import.** `CalendarImporter` has no test. `IcsParsingTests` pins the Ical.Net behaviour it relies on (recurrences sharing one UID, `DURATION` without `DTEND`, all-day detection, occurrences that are ordered and bounded only by the caller), and `ContextTests` covers the repository. `Context:Interval` and `Context:TimeZone` are read by nothing, and `context_daily` fixes the time zone to `Europe/Kyiv` ([Add a calendar feed](operations.md#add-a-calendar-feed)).
 
 **Oura tags in `context`.** `OuraTagContextImporter` and its kind normalisation have no test, and neither does the `enhanced_tag` projection into `tags`.
 
@@ -85,9 +85,7 @@ The tests call neither Oura's production API nor the network. The Oura suite rep
 
 Where these conflict, the docs on this site follow the code.
 
-- **`Oura__Scopes`.** `OuraOptions` and `.env.example` hold the working set; the fallback in `docker-compose.yml` is the spec's list with `spo2Daily`. The README's "The default is the set Oura's API actually enforces" holds only while `.env` keeps the line.
-- **`Context__*` in `.env.example`.** Its header says Compose passes these variables "straight through to both containers"; `docker-compose.yml` passes none of them.
-- **`Context:Interval` and `Context:TimeZone`.** Declared in `ContextOptions` and set in `.env.example`, read by nothing. The import runs every `Ingest:ReconcileInterval`, and `context_daily` fixes `Europe/Kyiv`.
+- **`Context:Interval` and `Context:TimeZone`.** Declared in `ContextOptions`, read by nothing. The import runs every `Ingest:ReconcileInterval`, and `context_daily` fixes `Europe/Kyiv`.
 - **How many processes.** The README says "Two processes, one database" and the Dockerfile says "One Dockerfile, two images". Compose runs three .NET services, and `publish.sh` builds three images.
 - **The MCP container.** The README says it "needs only the connection string"; Compose hands it the whole `x-dotnet-env` block, Oura client id and secret included, which the process does not read. The README also says it "cannot write": its tools only read, but it connects as the same database role as the ingest.
 - **A missing scope.** The API notes, `OuraApiClient` and its tests say Oura answers with a `401`. The page `/oauth/callback` renders, and comments in `BackfillJob` and `IngestWindowRepository`, say Oura answers with empty arrays.
@@ -98,7 +96,6 @@ Where these conflict, the docs on this site follow the code.
 - **`export-warehouse.sh`.** Its restore instructions name the services `oura-timescaledb` and `oura-ingest`; `docker-compose.yml` names them `timescaledb` and `ingest`.
 - **ADR 0001.** Its context lists continuous aggregates and compression policies among the schema work; the migrations create neither, and `0003` explains why the rollups are views.
 - **The Distributions dashboard.** Its description says `context` is "empty until Stage 4 fills it"; the importers already fill it, and Stage 4 is the MCP server.
-- **`GRAFANA_ADMIN_PASSWORD`.** The README's setup asks you to fill it in; the stack runs no Grafana, and only `verify-dashboards.py` reads it.
 
 ## Run the tests
 

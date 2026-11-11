@@ -4,12 +4,13 @@ A self-hosted personal health warehouse. It pulls Oura Ring data out of Oura's c
 Postgres/TimescaleDB so it can be joined against everything Oura will never see — calendar load,
 training, bedroom CO₂, body composition, glucose — and queried with SQL and Grafana.
 
-Runs on a single VPS under Docker Compose. Two processes, one database, no Kubernetes.
+Runs on a single VPS under Docker Compose. Three small services (ingest, api, mcp), one database, no Kubernetes.
 
-**Stages 1, 2 and 4 of 8.** OAuth, storage, backfill and the scheduled poll, three Grafana
-dashboards, the calendar and tag importers, and an MCP server over the warehouse. Webhooks
-(Stage 3) are deliberately skipped: they are a latency optimisation on a pipeline that already
-works, and Oura's nightly data lands mid-morning either way.
+**Quickstart:** [register an Oura app, run `./setup.sh`, authorize once](docs/guide/quickstart.md) — about five
+minutes. OAuth, storage, backfill and the scheduled poll, three Grafana dashboards, calendar and tag importers
+and an MCP server over the warehouse are built; see [what is and is not done](docs/guide/status.md). Webhooks
+are deliberately skipped: they are a latency optimisation on a pipeline that already works, and Oura's
+nightly data lands mid-morning either way.
 
 ---
 
@@ -33,7 +34,7 @@ Plus four rollup views: `sleep_nightly`, `hr_daily`, `hypnogram_nightly`, `conte
 
 ### Context
 
-Two importers fill `context`, and neither needs an API credential:
+Two importers fill `context`, and neither needs an API credential. The calendar one is off until you uncomment the `Context__Calendars__0__*` block in `.env`:
 
 - **Calendar** — any iCalendar URL, typically Google's private "Secret address in iCal format".
   Recurring events are expanded per occurrence, all-day events skipped, and anything that has left
@@ -49,42 +50,37 @@ an 18:00–20:30 call does not *start* after 19:00 but certainly ends after it.
 
 ## Setup
 
+Full walkthrough with troubleshooting: [docs/guide/quickstart.md](docs/guide/quickstart.md).
+
 ### 1. Register an Oura application
 
 At <https://developer.ouraring.com> (<https://cloud.ouraring.com/oauth/applications> also works;
 it is unclear which is canonical). Free, no approval needed — unapproved apps are capped at 10
-users, which is nine more than this needs.
-
-Register **both** redirect URIs, since Oura allowlists them verbatim and supports several:
+users, which is nine more than this needs. Register the redirect URI Oura will compare verbatim:
 
 ```
 http://localhost:8080/oauth/callback
-https://oura.your-domain.example/oauth/callback
 ```
 
 > Personal Access Tokens do not work. They were deprecated in December 2025 and there is no PAT
-> code path in this repo.
+> code path in this repo. Several sources report that Gen3+ rings also need an active Oura
+> Membership for API access; that is unverified against Oura's developer docs.
 
-### 2. Configure
+### 2. Configure and 3. Start
 
 ```bash
-cp .env.example .env
+./setup.sh --grafana     # asks for client id/secret, generates passwords, writes .env, starts the stack
 ```
 
-Fill in `Oura__ClientId`, `Oura__ClientSecret`, `POSTGRES_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`.
-Set `Oura__BackfillFrom` to roughly when you got the ring — the default of 2020-01-01 just means
-walking a few hundred extra empty windows.
+Or by hand: `cp .env.example .env`, fill in `Oura__ClientId`, `Oura__ClientSecret`, `POSTGRES_PASSWORD`,
+then `docker compose up -d` (add `--profile grafana` for Grafana). Images come from
+`ghcr.io/egoushka`; to build from source use `-f docker-compose.yml -f compose.build.yml up -d --build`.
+Set `Oura__BackfillFrom` to roughly when you got the ring.
 
 **Leave `Oura__Scopes` alone unless you know better than the 401s.** The default is the set Oura's
 API actually enforces, which is not the set its OpenAPI spec declares. The authorize endpoint
 accepts unknown scope names without complaint, so a typo there consents cleanly and then fails four
 collections at fetch time.
-
-### 3. Start
-
-```bash
-docker compose up -d
-```
 
 The ingest container applies the migrations, then waits and logs a warning until a token exists.
 That is expected.
@@ -103,6 +99,8 @@ Progress is recorded per window in `ingest_window`; killing the container and re
 rather than starting over.
 
 ### 5. Ask it questions
+
+Which MCP server to use: [docs/guide/mcp.md](docs/guide/mcp.md) (this repo's `mcp` with seven analysis tools, or [oura-mcp-app](https://github.com/Egoushka/oura-mcp-app) for interactive charts).
 
 The `mcp` container speaks MCP over HTTP at `/mcp`, against the warehouse rather than against
 Oura's API — proxying the API would only reproduce the phone app in text form; the value is in
@@ -132,20 +130,19 @@ It holds no Oura credential and cannot write. The container needs only the conne
 
 ### 6. Grafana
 
-**This stack does not run Grafana.** It is meant to sit beside an existing one, and a second
-instance would mean a second set of datasources, a second auth story and dashboards in two places.
+Optional, behind a compose profile: `docker compose --profile grafana up -d`, then
+<http://localhost:3000> (user `admin`, password `GRAFANA_ADMIN_PASSWORD` from `.env`). The datasource
+and the three dashboards in `grafana/dashboards/` are provisioned.
 
-The dashboards in `grafana/dashboards/` are the source of truth; copy them into your Grafana's
-dashboard provisioning directory. They read a Postgres datasource by uid `oura-timescaledb`, which
-`grafana/provisioning/datasources/timescaledb.yml` provisions. Verify them against the running
-Grafana with:
+To use a Grafana you already run, copy the dashboards into its provisioning directory; they read a
+Postgres datasource by uid `oura-timescaledb`, which `grafana/provisioning/datasources/timescaledb.yml`
+defines. Verify the panels against a running Grafana with:
 
 ```bash
 GRAFANA_ADMIN_PASSWORD=... ./grafana/verify-dashboards.py
 ```
 
-For a throwaway local Grafana while developing a panel, run one by hand against this stack's
-network rather than adding it back to the compose file.
+Something wrong? [Troubleshooting](docs/guide/troubleshooting.md).
 
 ---
 

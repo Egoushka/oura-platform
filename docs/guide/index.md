@@ -28,7 +28,7 @@ You register your own Oura OAuth application. The README notes that registration
 ## What it does not do
 
 - **No real-time data.** Oura's nightly data lands mid-morning the next day ([Oura API notes](../oura-api-notes.md#data-availability-semantics)). Webhooks, Stage 3 of the roadmap, are skipped on purpose: `/webhooks/oura` answers `501` ([Program.cs](../../src/OuraPlatform.Api/Program.cs)).
-- **No Grafana in the stack.** The dashboards are JSON files for a Grafana you already run ([README](../../README.md#6-grafana)).
+- **Grafana is optional.** `docker compose --profile grafana up -d` starts one with the dashboards provisioned; the JSON files also work in a Grafana you already run ([README](../../README.md#6-grafana)).
 - **No authentication.** Neither the `api` nor the `mcp` process checks its callers. Compose publishes both on `127.0.0.1` only ([docker-compose.yml](../../docker-compose.yml)).
 - **No Personal Access Tokens.** Oura deprecated them in December 2025, and OAuth2 is the only path in the code ([Oura API notes](../oura-api-notes.md#authentication)).
 - **No deletions.** Nothing removes a document from `oura_raw`. The only `delete` in the code prunes calendar events that have left their feed ([ContextRepository.cs](../../src/OuraPlatform.Storage/ContextRepository.cs)).
