@@ -1,62 +1,52 @@
 ---
 title: "Quickstart"
-description: "Run the stack with Docker Compose, authorize your Oura account once, watch the first backfill, and query the warehouse with SQL and an MCP client."
+description: "Five minutes from a clone to a populated warehouse: register an Oura app, run ./setup.sh, authorize once, ask questions with SQL, Grafana or MCP."
 order: 1
 section: "Get started"
 ---
 
-You clone the repository, register an Oura application, fill in `.env`, start four containers and authorize once in a browser. The first backfill then fills the warehouse, newest data first.
+You register an Oura application, run `./setup.sh`, and authorize once in a browser. The first backfill then fills the warehouse, newest data first. Plan on five minutes of your time plus however long Oura's API takes to hand over your history.
 
 ## Before you start
 
-- Docker with the Compose plugin. The stack pulls prebuilt images from `ghcr.io/egoushka`, so you need no .NET SDK for this page. To build from source instead, add `-f docker-compose.yml -f compose.build.yml` to each `docker compose` command and `--build` to `up`.
-- An Oura account with a ring.
-- A browser that can reach port 8080 on the machine that runs the stack. Compose publishes the `api`, `mcp` and database ports on `127.0.0.1` only ([docker-compose.yml](../../docker-compose.yml)).
-
-## Register an Oura application
-
-Create an application at <https://developer.ouraring.com>. The README notes that <https://cloud.ouraring.com/oauth/applications> also works. Add this redirect URI to it:
-
-```text
-http://localhost:8080/oauth/callback
-```
-
-Oura compares redirect URIs verbatim and accepts several, so also register any other address you will reach the stack by ([.env.example](../../.env.example)). The URI the stack sends is `Oura__RedirectUri`, and the one above is its default ([OuraOptions.cs](../../src/OuraPlatform.Oura/OuraOptions.cs)).
+- Docker with the Compose plugin. The stack pulls prebuilt images from `ghcr.io/egoushka`, so you need no .NET SDK.
+- An Oura account with a ring, and a browser on the machine that runs the stack (ports are published on `127.0.0.1` only).
 
 > [!NOTE]
-> Personal Access Tokens do not work. Oura deprecated them in December 2025, and the code has no path for them.
+> **Membership (reported, not verified by us).** Oura's support pages and several third-party integration guides say that without an active Oura Membership you cannot use the Oura API, and that this applies to Gen3 and newer rings (Gen2 is said to be exempt). We found no statement of this on Oura's developer pages. If your backfill returns only empty or `401` responses, check your membership first.
 
-## Configure
+## 1. Register an Oura application (2 minutes)
+
+Personal Access Tokens were retired in December 2025, so an OAuth application is required.
+
+1. Open <https://developer.ouraring.com> (the older <https://cloud.ouraring.com/oauth/applications> also works) and sign in with your Oura account.
+2. Under **My Applications**, create a new application. Any name and description will do.
+3. Add this redirect URI, exactly (Oura compares it verbatim):
+
+   ```text
+   http://localhost:8080/oauth/callback
+   ```
+
+   `setup.sh` prints the exact URI again at the end, in case you pick another port.
+4. Tick the scopes if the form asks. The stack requests `personal daily heartrate workout tag session spo2 stress heart_health ring_configuration`.
+5. Copy the **client id** and **client secret**.
+
+A new app is limited to 10 users until Oura approves it. That is plenty for one person.
+
+## 2. Run setup (1 minute)
 
 ```bash
 git clone https://github.com/Egoushka/oura-platform.git
 cd oura-platform
-cp .env.example .env
+./setup.sh --grafana
 ```
 
-In `.env`, fill in these four:
+It asks for the client id and secret, the day you got the ring (this bounds the backfill) and your timezone, generates the database and Grafana passwords, writes `.env`, and starts the stack. Drop `--grafana` if you run your own Grafana, add `--build` to build the images from source, `--no-start` to only write `.env`. It never overwrites an existing `.env`.
 
-| variable | value |
-|---|---|
-| `Oura__ClientId` | your application's client id |
-| `Oura__ClientSecret` | its client secret |
-| `POSTGRES_PASSWORD` | a password for the database |
-| `Oura__BackfillFrom` | about the day you got the ring |
-
-The backfill walks every window back to `Oura__BackfillFrom`, empty or not, so a date near your first night with the ring saves requests. Its default is `2020-01-01`. Leave the rest as `.env.example` has it; the [reference](reference.md#compose-variables) lists each variable.
+Prefer to do it by hand: `cp .env.example .env`, set `Oura__ClientId`, `Oura__ClientSecret`, `POSTGRES_PASSWORD` (compose refuses to start without one) and `docker compose up -d`. The [reference](reference.md#compose-variables) lists every variable.
 
 > [!WARNING]
-> Keep the `Oura__Scopes` line from `.env.example`. Without it, `docker-compose.yml` falls back to `personal daily heartrate workout tag session spo2Daily`, the list in Oura's OpenAPI spec, and overrides the code's default. The [Oura API notes](../oura-api-notes.md#scopes--the-specs-list-is-wrong-verified-against-a-live-token) record that this list consents without an error and then fails four collections with `401`.
-
-Two blocks in `.env.example` do nothing under Compose. `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` are read only by `grafana/verify-dashboards.py`, from your shell, and `GRAFANA_PORT` is read by nothing. The `Context__*` block never reaches a container, because `docker-compose.yml` passes each service only the variables in its `x-dotnet-env` block. [Add a calendar feed](operations.md#add-a-calendar-feed) shows how to pass them.
-
-## Start the stack
-
-```bash
-docker compose up -d
-```
-
-The first run pulls `oura-ingest`, `oura-api` and `oura-mcp` (built from the one Dockerfile) and starts `timescale/timescaledb:2.17.2-pg17`. The three .NET services start once the database passes its healthcheck.
+> Do not change `Oura__Scopes` unless you know why. Oura's OpenAPI spec lists `spo2Daily` and omits `stress` and `heart_health`; the authorize endpoint silently ignores unknown names and the affected collections then fail with `401`. The default in `docker-compose.yml`, `.env.example` and the code is the working set from the [Oura API notes](../oura-api-notes.md#scopes--the-specs-list-is-wrong-verified-against-a-live-token). Of these, Oura's public auth page documents `personal daily heartrate workout tag session spo2`; `stress`, `heart_health` and `ring_configuration` come from observed 401 responses.
 
 Follow the ingest log:
 
@@ -64,21 +54,15 @@ Follow the ingest log:
 docker compose logs -f ingest
 ```
 
-The processes log compact JSON, one object per line, with the message template in `@mt` ([Program.cs](../../src/OuraPlatform.Ingest/Program.cs)). The ingest applies the migrations, logs `Database schema is up to date`, and then warns once:
+The ingest applies the migrations, then warns once, which is expected:
 
 ```text
 No Oura token stored. Waiting — complete the handshake at /oauth/start.
 ```
 
-That is expected: it checks for a token every 30 seconds ([IngestWorker.cs](../../src/OuraPlatform.Ingest/IngestWorker.cs)). The api reports the same state:
+`curl -s localhost:8080/healthz` answers `Degraded`, status 200, until a token is stored.
 
-```bash
-curl -s localhost:8080/healthz
-```
-
-It answers `Degraded`, with status 200, until a token is stored ([DatabaseHealthCheck.cs](../../src/OuraPlatform.Api/DatabaseHealthCheck.cs)).
-
-## Authorize
+## 3. Authorize (1 minute)
 
 Open <http://localhost:8080/oauth/start> in the browser and approve the request at Oura. You land on a page headed "Connected" that shows when the access token expires and which scopes Oura granted ([OAuthEndpoints.cs](../../src/OuraPlatform.Api/OAuthEndpoints.cs)).
 
@@ -105,6 +89,10 @@ If a collection logs `skipped — the token lacks the '...' scope`, the token wa
 3. Authorize again at `/oauth/start`.
 4. Run `docker compose restart ingest`. Otherwise the skipped collection is retried on the next cycle, up to 6 hours later.
 
+## Look at it
+
+With `--grafana`, open <http://localhost:3000> (user `admin`, password in `.env` as `GRAFANA_ADMIN_PASSWORD`): the three dashboards are already provisioned. Panels fill in as the backfill reaches recent days.
+
 ## Query the warehouse
 
 Open `psql` inside the database container:
@@ -126,7 +114,7 @@ A day with no data has no row, and a value Oura did not measure is `NULL`: nothi
 
 ## Ask it questions over MCP
 
-The `mcp` container serves MCP over HTTP at `/mcp`, published on port 8081 ([Program.cs](../../src/OuraPlatform.Mcp/Program.cs)). Add it to an MCP client:
+The `mcp` container serves MCP over HTTP at `/mcp`, published on port 8081 ([Program.cs](../../src/OuraPlatform.Mcp/Program.cs)). Add it to an MCP client (see [which MCP to use](mcp.md)):
 
 ```json
 { "mcpServers": { "oura": { "url": "http://localhost:8081/mcp" } } }
@@ -152,4 +140,8 @@ With `Oura__UseSandbox=true` the client calls Oura's sandbox, which accepts any 
 > [!CAUTION]
 > Use a separate database for the sandbox. `ingest_window` does not record which API a window came from, so a later production backfill against the same database skips every window the sandbox run completed, and the fabricated documents stay in `oura_raw` ([BackfillJob.cs](../../src/OuraPlatform.Ingest/BackfillJob.cs)). `docker compose down -v` deletes the `timescale-data` volume, and everything the warehouse holds with it.
 
-Next: [Operate the warehouse](operations.md) to add calendar context and the Grafana dashboards.
+Next: [Which MCP to use](mcp.md), [Operate the warehouse](operations.md) to add calendar context, and [Troubleshooting](troubleshooting.md) if something above did not match.
+
+## No API access? Export a CSV instead
+
+If you cannot get API access (no membership, or Oura has not enabled it for your account), Oura lets you download your own data from the Membership Hub / account settings on the Oura website. That export is a set of CSV files that you can open in a spreadsheet or load into any database. **This repository does not import them**, so the dashboards and MCP tools will not see that data. The file layout is Oura's and we have not checked it against the current export.

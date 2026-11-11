@@ -77,19 +77,16 @@ The default `Scopes` is `personal daily heartrate workout tag session spo2 stres
 | `Oura__ClientId` | none, required | `Oura:ClientId` |
 | `Oura__ClientSecret` | none, required | `Oura:ClientSecret` |
 | `Oura__RedirectUri` | `http://localhost:8080/oauth/callback` | `Oura:RedirectUri` |
-| `Oura__Scopes` | the spec's list, below | `Oura:Scopes` |
+| `Oura__Scopes` | `personal daily heartrate workout tag session spo2 stress heart_health ring_configuration` | `Oura:Scopes` |
 | `Oura__UseSandbox` | `false` | `Oura:UseSandbox` |
 | `Oura__BackfillFrom` | `2020-01-01` | `Oura:BackfillFrom` |
 | `Oura__ReconcileTrailingDays` | `7` | `Oura:ReconcileTrailingDays` |
 
 A required variable that is unset or empty stops Compose with a message saying what to set.
 
-The `x-dotnet-env` block passes `ConnectionStrings__Postgres`, the `Oura__*` variables above and `TZ` to all three .NET services, `mcp` included, although the MCP process reads only the connection string. No other variable reaches a container: not `Context__*`, not `Ingest__*`, not the `GRAFANA_*` lines in `.env.example`.
+The `x-dotnet-env` block passes `ConnectionStrings__Postgres`, the `Oura__*` variables above and `TZ` to all three .NET services, `mcp` included, although the MCP process reads only the connection string. The `ingest` service additionally loads the whole `.env` (`env_file`), which is how `Context__*` and `Ingest__*` reach it. `GRAFANA_*` reach only the `grafana` service, behind the `grafana` profile.
 
-> [!WARNING]
-> The Compose fallback for `Oura__Scopes` is `personal daily heartrate workout tag session spo2Daily`, which is not the code's default. It is the spec's list, which the [Oura API notes](../oura-api-notes.md#scopes--the-specs-list-is-wrong-verified-against-a-live-token) say fails four collections. `.env.example` sets the working set; keep that line.
-
-`TZ` in `.env.example` is `Europe/Kyiv`. The backfill and the reconcile job compute today in UTC regardless ([BackfillJob.cs](../../src/OuraPlatform.Ingest/BackfillJob.cs), [ReconcileJob.cs](../../src/OuraPlatform.Ingest/ReconcileJob.cs)); the MCP `weekly_digest` tool uses the container's local date for its default week ([OuraTools.cs](../../src/OuraPlatform.Mcp/OuraTools.cs)).
+`TZ` in `.env.example` is `UTC`. The backfill and the reconcile job compute today in UTC regardless ([BackfillJob.cs](../../src/OuraPlatform.Ingest/BackfillJob.cs), [ReconcileJob.cs](../../src/OuraPlatform.Ingest/ReconcileJob.cs)); the MCP `weekly_digest` tool uses the container's local date for its default week ([OuraTools.cs](../../src/OuraPlatform.Mcp/OuraTools.cs)).
 
 ## Ingest command line
 
