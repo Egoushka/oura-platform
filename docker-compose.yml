@@ -35,10 +35,7 @@ services:
   # Runs the migrations, backfills once, then reconciles a trailing window on a timer.
   # Single instance by design -- see the invariant in CLAUDE.md. Do not scale this.
   ingest:
-    build:
-      context: .
-      args:
-        PROJECT: OuraPlatform.Ingest
+    image: ghcr.io/egoushka/oura-ingest:${OURA_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       timescaledb:
@@ -47,10 +44,7 @@ services:
 
   # OAuth callback and health only. No auth of its own: it sits behind the reverse proxy.
   api:
-    build:
-      context: .
-      args:
-        PROJECT: OuraPlatform.Api
+    image: ghcr.io/egoushka/oura-api:${OURA_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       timescaledb:
@@ -71,10 +65,7 @@ services:
   # Stage 4. Read-only analytics over the warehouse, spoken as MCP. It holds no Oura credential
   # of its own and never calls the API — the value is in the joins, not in proxying the phone app.
   mcp:
-    build:
-      context: .
-      args:
-        PROJECT: OuraPlatform.Mcp
+    image: ghcr.io/egoushka/oura-mcp:${OURA_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       timescaledb:

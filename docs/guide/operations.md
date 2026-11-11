@@ -108,10 +108,10 @@ The projector reads only stored payloads. After you change `DocumentProjector`, 
 
 ```bash
 docker compose stop ingest
-docker compose build ingest
-docker compose run --rm ingest --reproject                   # every ingested collection
-docker compose run --rm ingest --reproject sleep daily_spo2  # named collections only
-docker compose up -d ingest
+docker compose -f docker-compose.yml -f compose.build.yml build ingest
+docker compose -f docker-compose.yml -f compose.build.yml run --rm ingest --reproject                   # every ingested collection
+docker compose -f docker-compose.yml -f compose.build.yml run --rm ingest --reproject sleep daily_spo2  # named collections only
+docker compose -f docker-compose.yml -f compose.build.yml up -d ingest
 ```
 
 `--reproject` applies pending migrations and projects every stored document of each collection again. It re-imports Oura tags into `context` when you name no collection or name `enhanced_tag`. It then logs `Nothing was fetched from Oura.` and exits 0 without starting the ingest loop ([ReprojectCommand.cs](../../src/OuraPlatform.Ingest/ReprojectCommand.cs), [Program.cs](../../src/OuraPlatform.Ingest/Program.cs)).
@@ -156,7 +156,7 @@ For a host that pulls images instead of building them from source:
 
 [publish.sh](../../scripts/publish.sh) refuses a dirty working tree and runs `dotnet test tests/OuraPlatform.Oura.Tests` first, which needs the .NET SDK locally; the storage suite does not run. It then builds `oura-api`, `oura-ingest` and `oura-mcp` for `linux/amd64` with `docker buildx`, labels each with the commit, version and source, pushes them to `OURA_REGISTRY` (default `ghcr.io/egoushka`) and prints each digest. Log in to the registry first.
 
-The repository's `docker-compose.yml` builds from source and has no variant that pulls these images.
+Pushing a `v*` tag runs [release-images.yml](../../.github/workflows/release-images.yml), which builds the same three images for `linux/amd64` and `linux/arm64` and pushes them to GHCR as `X.Y.Z`, `X.Y` and `latest`. `docker-compose.yml` pulls them (`OURA_VERSION` picks the tag, default `latest`); `compose.build.yml` is the override that builds from source instead.
 
 ## Read the logs
 

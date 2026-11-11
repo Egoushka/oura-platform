@@ -19,7 +19,7 @@ liability here.
 dotnet build
 dotnet test                              # runs with zero credentials; uses sandbox fixtures
 dotnet run --project src/OuraPlatform.Api
-docker compose up -d
+docker compose up -d        # pulls ghcr.io/egoushka images; build from source: -f docker-compose.yml -f compose.build.yml
 docker compose logs -f ingest
 ```
 

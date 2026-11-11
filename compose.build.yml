@@ -1,0 +1,21 @@
+# Builds the three .NET images from source instead of pulling them from GHCR:
+#
+#   docker compose -f docker-compose.yml -f compose.build.yml up -d --build
+#
+# Use it when you change code, or on a platform the published images do not cover.
+services:
+  ingest:
+    build:
+      context: .
+      args:
+        PROJECT: OuraPlatform.Ingest
+  api:
+    build:
+      context: .
+      args:
+        PROJECT: OuraPlatform.Api
+  mcp:
+    build:
+      context: .
+      args:
+        PROJECT: OuraPlatform.Mcp
