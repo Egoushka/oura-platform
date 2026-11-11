@@ -160,8 +160,9 @@ curl -s localhost:8081/healthz         # Degraded until ingest has backfilled an
 
 ## Publishing
 
-The homelab deliberately does not build first-party source at deploy time, so images go to GHCR
-(`ghcr.io/egoushka/oura-{ingest,api,mcp}`, public) and it pulls them like any third-party image:
+Pushing a `v*` tag runs `.github/workflows/release-images.yml`, which publishes multi-arch (`amd64`, `arm64`) images to
+`ghcr.io/egoushka/oura-{ingest,api,mcp}`; `docker-compose.yml` pulls them. To build from source use
+`docker compose -f docker-compose.yml -f compose.build.yml up -d --build`. By hand (amd64 only):
 
 ```bash
 ./scripts/publish.sh 0.1.0

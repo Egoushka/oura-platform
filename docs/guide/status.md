@@ -70,7 +70,7 @@ The tests call neither Oura's production API nor the network. The Oura suite rep
 
 **Grafana dashboards.** `verify-dashboards.py` needs a running Grafana, and CI does not run it. The two context panels join on the same day, with no lag ([Install the Grafana dashboards](operations.md#install-the-grafana-dashboards)).
 
-**Compose deployment and images.** CI restores, builds and tests the solution, and scans for secrets; it never builds the Dockerfile or starts the stack. `scripts/publish.sh` runs by hand.
+**Compose deployment and images.** CI restores, builds and tests the solution, and scans for secrets; it never builds the Dockerfile or starts the stack. A `v*` tag builds and pushes multi-arch images to GHCR ([release-images.yml](../../.github/workflows/release-images.yml)); that workflow has not yet run on a real tag, and `scripts/publish.sh` remains the manual path.
 
 **Warehouse export and restore.** The script has no test, and the restore commands it prints name services that this repository's `docker-compose.yml` calls something else ([Move to another host](operations.md#move-to-another-host)).
 

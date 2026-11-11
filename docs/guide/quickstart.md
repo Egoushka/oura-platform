@@ -9,7 +9,7 @@ You clone the repository, register an Oura application, fill in `.env`, start fo
 
 ## Before you start
 
-- Docker with the Compose plugin. The images build from the repository's [Dockerfile](../../Dockerfile), so you need no .NET SDK for this page.
+- Docker with the Compose plugin. The stack pulls prebuilt images from `ghcr.io/egoushka`, so you need no .NET SDK for this page. To build from source instead, add `-f docker-compose.yml -f compose.build.yml` to each `docker compose` command and `--build` to `up`.
 - An Oura account with a ring.
 - A browser that can reach port 8080 on the machine that runs the stack. Compose publishes the `api`, `mcp` and database ports on `127.0.0.1` only ([docker-compose.yml](../../docker-compose.yml)).
 
@@ -56,7 +56,7 @@ Two blocks in `.env.example` do nothing under Compose. `GRAFANA_ADMIN_USER` and 
 docker compose up -d
 ```
 
-The first run builds three images from the one Dockerfile, for `OuraPlatform.Ingest`, `OuraPlatform.Api` and `OuraPlatform.Mcp`, and starts `timescale/timescaledb:2.17.2-pg17`. The three .NET services start once the database passes its healthcheck.
+The first run pulls `oura-ingest`, `oura-api` and `oura-mcp` (built from the one Dockerfile) and starts `timescale/timescaledb:2.17.2-pg17`. The three .NET services start once the database passes its healthcheck.
 
 Follow the ingest log:
 
