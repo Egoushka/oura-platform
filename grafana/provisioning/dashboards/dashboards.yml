@@ -1,0 +1,10 @@
+# Loads the committed dashboards from /var/lib/grafana/dashboards (mounted from grafana/dashboards).
+apiVersion: 1
+
+providers:
+  - name: oura
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
