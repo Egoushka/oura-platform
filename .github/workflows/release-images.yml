@@ -1,5 +1,3 @@
-# PENDING: move to .github/workflows/release-images.yml (`git mv`). The authoring token had no `workflow`
-# permission, so GitHub refused a push that creates a file under .github/workflows/.
 name: release-images
 
 # Builds the three images for linux/amd64 and linux/arm64 and pushes them to GHCR when a v* tag is
