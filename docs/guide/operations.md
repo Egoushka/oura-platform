@@ -135,6 +135,14 @@ Restore before you authorize the new host. The dump holds rows only, so it colli
 > [!CAUTION]
 > Stop the ingest on the old host before the new one runs, and leave it stopped. The refresh token is single-use: two ingests against one Oura application race to spend it, and the loser holds a token Oura has already invalidated ([README](../../README.md#moving-to-another-host)).
 
+### Check that a dump restores
+
+```bash
+./scripts/verify-restore.sh oura-warehouse-<date>.sql.gz --prev-count <count from the last check>
+```
+
+It loads the dump into a scratch TimescaleDB (same image as `docker-compose.yml`, no network, no volume), applies the migrations, and fails unless the newest `daily_*` day in `oura_raw` is at most 36 hours old and the raw document count is not below `--prev-count`. The live warehouse is never touched. The last line, `OK <n> raw documents, newest day <date>`, gives the count to pass next time. Wiring it into the box's restore-test job lives in the homelab repository.
+
 ## Publish images
 
 For a host that pulls images instead of building them from source:
