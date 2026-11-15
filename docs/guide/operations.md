@@ -141,7 +141,7 @@ Restore before you authorize the new host. The dump holds rows only, so it colli
 ./scripts/verify-restore.sh oura-warehouse-<date>.sql.gz --prev-count <count from the last check>
 ```
 
-It loads the dump into a scratch TimescaleDB (same image as `docker-compose.yml`, no network, no volume), applies the migrations, and fails unless the newest `daily_*` day in `oura_raw` is at most 36 hours old and the raw document count is not below `--prev-count`. The live warehouse is never touched. The last line, `OK <n> raw documents, newest day <date>`, gives the count to pass next time. Wiring it into the box's restore-test job lives in the homelab repository.
+It loads the dump into a scratch TimescaleDB (same image as `docker-compose.yml`, no network, no volume), applies the migrations, and fails unless the newest `daily_*` day in `oura_raw` is at most 36 hours old and the raw document count is not below `--prev-count`. The live warehouse is never touched. The last line, `OK <n> raw documents, newest day <date>`, gives the count to pass next time. For the box's nightly `pg_dumpall` dump (schema included) add `--full` and set `OURA_RESTORE_IMAGE` to the image the dump came from; the migrations are skipped. Wiring it into the box's restore-test job lives in the homelab repository.
 
 ## Publish images
 
